@@ -21,8 +21,6 @@
 
 #include <bcrypt.h>
 
-//#define NT_SUCCESS(Status)          (((NTSTATUS)(Status)) >= 0)
-
 #pragma comment( lib, "bcrypt" )
 
 #define USE_STD_VECTORS 
@@ -62,14 +60,9 @@ void Check( NTSTATUS ntStatus )
     }
 }
 
-template<class T>
-//using pippo = const_cast<typename std::iterator_traits<T>::value_type*>;
-//using pippo = T*;
-using pippo = typename std::iterator_traits<T>::value_type*;
-
 template<typename I>
-auto ItemNonConstAddrFromIt( I It ) {
-    return const_cast<typename std::iterator_traits<I>::value_type*>(  &*It );
+auto ItToItemAddr( I It ) {
+    return const_cast<typename std::iterator_traits<I>::value_type*>( &*It );
 }
 
 class AlgProvSessionMngr {
@@ -89,23 +82,11 @@ public:
         DWORD cbCipherText {};
         Check(
             ::BCryptEncrypt(
-                Key.GetHndlr(),
-                /*
-                const_cast<typename std::iterator_traits<PTI>::value_type*>( 
-                    &*PlainTextBegin 
-                ),
-                */
-                ItemNonConstAddrFromIt( PlainTextBegin ),
+                Key.GetHndlr(), ItToItemAddr( PlainTextBegin ),
                 std::distance( PlainTextBegin, PlainTextEnd ),
-                nullptr,
-                const_cast<typename std::iterator_traits<IVI>::value_type*>( 
-                    &*InitVectBegin 
-                ),
+                nullptr, ItToItemAddr( InitVectBegin ),
                 std::distance( InitVectBegin, InitVectEnd ),
-                nullptr,
-                {},
-                &cbCipherText,
-                BCRYPT_BLOCK_PADDING
+                nullptr, {}, &cbCipherText, BCRYPT_BLOCK_PADDING
             )
         );
         return cbCipherText;
@@ -119,20 +100,11 @@ public:
         DWORD BlockLength {};
         Check(
             ::BCryptDecrypt(
-                Key.GetHndlr(),
-                const_cast<typename std::iterator_traits<CTI>::value_type*>( 
-                    &*CipherTextBegin 
-                ),
+                Key.GetHndlr(), ItToItemAddr( CipherTextBegin ),
                 std::distance( CipherTextBegin, CipherTextEnd ),
-                nullptr,
-                const_cast<typename std::iterator_traits<IVI>::value_type*>( 
-                    &*InitVectBegin 
-                ),
+                nullptr, ItToItemAddr( InitVectBegin ),
                 std::distance( InitVectBegin, InitVectEnd ),
-                nullptr,
-                {},
-                &BlockLength,
-                BCRYPT_BLOCK_PADDING
+                nullptr, {}, &BlockLength, BCRYPT_BLOCK_PADDING
             )
         );
         return BlockLength;
@@ -143,8 +115,11 @@ public:
         DWORD Object {};
         Check(
             ::BCryptGetProperty(
-                alg_, BCRYPT_OBJECT_LENGTH, (PBYTE)&Object,
-                sizeof Object, &Dummy, {}
+                alg_, BCRYPT_OBJECT_LENGTH, 
+                //(PBYTE)&Object, 
+                reinterpret_cast<PBYTE>( &Object ), 
+                sizeof Object, 
+                &Dummy, {}
             )
         );
         return Object;
@@ -152,7 +127,6 @@ public:
 
 private:
     BCRYPT_ALG_HANDLE alg_ {};
-
 };
 //---------------------------------------------------------------------------
 
@@ -198,8 +172,6 @@ public:
             )
         );
 
-//        wprintf( L"\nDecr Blk Len: %d\n\n", PlainText.size() );
-
         auto const Size = Decrypt(
             Key, CipherTextBegin, CipherTextEnd,
             std::begin( PlainText ), std::end( PlainText ),
@@ -218,7 +190,7 @@ private:
         // Determine whether the cbBlockLen is not longer than the IV length.
         if ( IVBlockLength > std::distance( InitVectBegin, InitVectEnd ) ) {
             throw Exception(
-                _D( "**** block length is longer than the provided IV length\n")
+                _D( "Block length is longer than the provided IV length" )
             );
         }
     }
@@ -228,12 +200,10 @@ private:
         DWORD BlockLen {};
         Check(
             ::BCryptGetProperty(
-                GetHndlr(),
-                BCRYPT_BLOCK_LENGTH,
-                (PBYTE)&BlockLen,
-                sizeof BlockLen,
-                &Dummy,
-                {}
+                GetHndlr(), BCRYPT_BLOCK_LENGTH, 
+                //(PBYTE)&BlockLen, 
+                reinterpret_cast<PBYTE>( &BlockLen ),
+                sizeof BlockLen, &Dummy, {}
             )
         );
         return BlockLen;
@@ -250,21 +220,15 @@ private:
 
         Check(
             ::BCryptEncrypt(
-                Key.GetHndlr(),
-                const_cast<typename std::iterator_traits<PTI>::value_type*>( &*PlainTextBegin ),
+                Key.GetHndlr(), ItToItemAddr( PlainTextBegin ),
                 std::distance( PlainTextBegin, PlainTextEnd ),
-                nullptr,
-                const_cast<typename std::iterator_traits<IVI>::value_type*>( &*InitVectBegin ),
+                nullptr, ItToItemAddr( InitVectBegin ),
                 std::distance( InitVectBegin, InitVectEnd ),
-                const_cast<typename std::iterator_traits<CTI>::value_type*>( &*CipherTextBegin ),
+                ItToItemAddr( CipherTextBegin ),
                 std::distance( CipherTextBegin, CipherTextEnd ),
-                &BlockLen,
-                BCRYPT_BLOCK_PADDING
+                &BlockLen, BCRYPT_BLOCK_PADDING
             )
         );
-
-//        wprintf( L"\n(Priv) Encr Blk Len: %d\n\n", BlockLen );
-        
         return BlockLen;
     }
 
@@ -279,16 +243,13 @@ private:
 
         Check(
             ::BCryptDecrypt(
-                Key.GetHndlr(),
-                const_cast<typename std::iterator_traits<CTI>::value_type*>( &*CipherTextBegin ),
+                Key.GetHndlr(), ItToItemAddr( CipherTextBegin ),
                 std::distance( CipherTextBegin, CipherTextEnd ),
-                nullptr,
-                const_cast<typename std::iterator_traits<IVI>::value_type*>( &*InitVectBegin ),
+                nullptr, ItToItemAddr( InitVectBegin ),
                 std::distance( InitVectBegin, InitVectEnd ),
-                &*PlainTextBegin,
+                ItToItemAddr( PlainTextBegin ),
                 std::distance( PlainTextBegin, PlainTextEnd ),
-                &BlockLen,
-                BCRYPT_BLOCK_PADDING
+                &BlockLen, BCRYPT_BLOCK_PADDING
             )
         );
 
@@ -337,7 +298,7 @@ public:
         Check(
             ::BCryptGenerateSymmetricKey(
                 Alg.GetHndlr(), &key_, keyObject_.data(), keyObject_.size(),
-                const_cast<typename std::iterator_traits<KI>::value_type*>( &*KeyBegin ),
+                ItToItemAddr( KeyBegin ),
                 std::distance( KeyBegin, KeyEnd ), {}
             )
         );
@@ -349,10 +310,7 @@ public:
         Check(
             ::BCryptImportKey(
                 Alg.GetHndlr(), nullptr, BCRYPT_OPAQUE_KEY_BLOB, &key_,
-                keyObject_.data(), keyObject_.size(),
-                const_cast<typename std::iterator_traits<BI>::value_type*>( 
-                    &*BlobBegin 
-                ),
+                keyObject_.data(), keyObject_.size(), ItToItemAddr( BlobBegin ),
                 std::distance( BlobBegin, BlobEnd ),
                 {}
             )
@@ -423,8 +381,9 @@ public:
         Check(
             ::BCryptGetProperty(
                 GetHndlr(), BCRYPT_HASH_LENGTH, 
-                (PBYTE)&HashLen, sizeof HashLen,
-                &Dummy, 0
+                //(PBYTE)&HashLen, 
+                reinterpret_cast<PBYTE>( &HashLen ),
+                sizeof HashLen, &Dummy, 0
             )
         );
 
