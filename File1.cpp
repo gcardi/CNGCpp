@@ -25,51 +25,51 @@
 
 #pragma comment( lib, "bcrypt" )
 
-//std::vector<BYTE> const rgbPlaintext {
+#define USE_STD_VECTORS 
+
+#if defined( USE_STD_VECTORS )
+std::vector<BYTE> const rgbPlaintext {
+    0x30, 0x00, 0x31, 0x00, 0x32, 0x00, 0x33, 0x00, 0x34, 0x00, 0x35, 0x00, 
+    0x36, 0x00, 0x37, 0x00, 0x38, 0x00, 0x39, 0x00, 0x61, 0x00, 0x42, 0x00, 
+    0x63, 0x00, 0x44, 0x00, 0x65, 0x00,    
+};
+#else
 TBytes rgbPlaintext =
     TEncoding::Unicode->GetBytes(
         _D( "" )
-//        "the quick brown fox jumps over the lazy dog"
         "0123456789aBcDe"
     );
-/*
-{
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-    0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 1
-};
-*/
+#endif
 
-//std::vector<BYTE> const rgbIV {
+#if defined( USE_STD_VECTORS )
+std::vector<BYTE> const rgbIV {
+#else
 TBytes rgbIV {
+#endif
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-    0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, //0x10
+    0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 
 };
-
-/*
-//std::vector<BYTE> const rgbAES256Key {
-TBytes rgbAES256Key {
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-    0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-    0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F
-};
-*/
 
 String SecretKey = _D( "sopralapancalacapracampasottolapancalacapracrepa" );
-//                      000000000111111111122222222223333333333444444444
-//                      123456789012345678901234567890123456789012345678
 
 void Check( NTSTATUS ntStatus )
 {
-//    if ( !NT_SUCCESS( ntStatus ) ) {
     if ( ntStatus < 0 ) {
         throw Exception(
             _D( "CNGCrypt Error 0x%08x" ),
             ARRAYOFCONST( ( ntStatus ) )
         );
     }
+}
+
+template<class T>
+//using pippo = const_cast<typename std::iterator_traits<T>::value_type*>;
+//using pippo = T*;
+using pippo = typename std::iterator_traits<T>::value_type*;
+
+template<typename I>
+auto ItemNonConstAddrFromIt( I It ) {
+    return const_cast<typename std::iterator_traits<I>::value_type*>(  &*It );
 }
 
 class AlgProvSessionMngr {
@@ -90,10 +90,17 @@ public:
         Check(
             ::BCryptEncrypt(
                 Key.GetHndlr(),
-                const_cast<typename std::iterator_traits<PTI>::value_type*>( &*PlainTextBegin ),
+                /*
+                const_cast<typename std::iterator_traits<PTI>::value_type*>( 
+                    &*PlainTextBegin 
+                ),
+                */
+                ItemNonConstAddrFromIt( PlainTextBegin ),
                 std::distance( PlainTextBegin, PlainTextEnd ),
                 nullptr,
-                const_cast<typename std::iterator_traits<IVI>::value_type*>( &*InitVectBegin ),
+                const_cast<typename std::iterator_traits<IVI>::value_type*>( 
+                    &*InitVectBegin 
+                ),
                 std::distance( InitVectBegin, InitVectEnd ),
                 nullptr,
                 {},
@@ -113,10 +120,14 @@ public:
         Check(
             ::BCryptDecrypt(
                 Key.GetHndlr(),
-                const_cast<typename std::iterator_traits<CTI>::value_type*>( &*CipherTextBegin ),
+                const_cast<typename std::iterator_traits<CTI>::value_type*>( 
+                    &*CipherTextBegin 
+                ),
                 std::distance( CipherTextBegin, CipherTextEnd ),
                 nullptr,
-                const_cast<typename std::iterator_traits<IVI>::value_type*>( &*InitVectBegin ),
+                const_cast<typename std::iterator_traits<IVI>::value_type*>( 
+                    &*InitVectBegin 
+                ),
                 std::distance( InitVectBegin, InitVectEnd ),
                 nullptr,
                 {},
@@ -311,13 +322,10 @@ public:
 class SimmetricKeyMngr {
 public:
     template<typename A>
-    SimmetricKeyMngr( A& Alg )
-      : keyObject_( Alg.GetObjectLength() )
-    {
-    }
+    SimmetricKeyMngr( A& Alg ) : keyObject_( Alg.GetObjectLength() ) {}
 
     template<typename A, typename KI>
-    SimmetricKeyMngr( A& Alg, KI KeyBegin, KI KeyEnd )
+    SimmetricKeyMngr( A& Alg, KI KeyBegin, KI KeyEnd ) 
       : SimmetricKeyMngr( Alg )
     {
         Generate( Alg, KeyBegin, KeyEnd );
@@ -458,15 +466,18 @@ String BytesToHex( B&& Bytes, S&& Sep )
     }
     return SB->ToString();
 }
+//---------------------------------------------------------------------------
 
 int _tmain(int argc, _TCHAR* argv[])
 {
     try {
+        wprintf( L"IV: %s\n", BytesToHex( rgbIV ).c_str() );
+
         SHA256AlgProvSessionMngr HashAlg;
 
         wprintf( L"Secret key: %s\n", SecretKey.c_str() );
 
-        auto EncodedSecretKey = TEncoding::UTF8->GetBytes( SecretKey );
+        auto EncodedSecretKey = TEncoding::Unicode->GetBytes( SecretKey );
 
         auto const Hash = HashAlg.Process( 
             std::begin( EncodedSecretKey ), std::end( EncodedSecretKey ) 
@@ -488,7 +499,10 @@ int _tmain(int argc, _TCHAR* argv[])
 
         wprintf( L"Text to cipher: %s\n", &rgbPlaintext[0] );
         wprintf( L"Text to cipher: %s\n", BytesToHex( rgbPlaintext ).c_str() );
-        wprintf( L"Text len: %d\n", rgbPlaintext.Length );
+        wprintf( 
+            L"Text len: %d\n", 
+            std::distance( std::begin( rgbPlaintext ), std::end( rgbPlaintext ) )
+        );
 
         auto CipherText =
             Alg.Encrypt(
